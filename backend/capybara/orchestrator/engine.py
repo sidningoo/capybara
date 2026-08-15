@@ -51,7 +51,7 @@ class Orchestrator:
 
         self.market = MarketData(broker, timeframe="1Day", lookback=300)
         self.detector = RegimeDetector()
-        self.selector = StrategySelector()
+        self.selector = self._build_selector()
         self.playbook = default_playbook()
         self.risk = RiskManager(settings)
         self.guardrails = RiskGuardrails(
@@ -71,6 +71,28 @@ class Orchestrator:
 
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+
+    # ───────────── selector factory ─────────────
+    def _build_selector(self):
+        """Pick the selector per config: rules (default) or a learned LinUCB model."""
+        if self.s.selector_type.lower() == "bandit":
+            try:
+                from capybara.selector.bandit import LinUCBSelector
+                sel = LinUCBSelector.load(self.s.bandit_model_path)
+                log.info("Using LinUCB bandit selector from %s", self.s.bandit_model_path)
+                return sel
+            except Exception as exc:
+                log.warning("Bandit model unavailable (%s); falling back to rules selector.", exc)
+        sel = StrategySelector()
+        # Optional: load a learned Stage-1 score table.
+        if self.s.scores_path:
+            try:
+                from capybara.backtest.attribution import load_scores
+                sel.load_scores(load_scores(self.s.scores_path))
+                log.info("Loaded learned regime scores from %s", self.s.scores_path)
+            except Exception as exc:
+                log.warning("Could not load scores from %s: %s", self.s.scores_path, exc)
+        return sel
 
     # ───────────── clock ─────────────
     def _now(self) -> datetime:
@@ -112,12 +134,18 @@ class Orchestrator:
         # 2) Regime -> selection -> intent, per symbol.
         intents: dict[str, Intent] = {}
         prices: dict[str, float] = {}
+        vols: dict[str, float] = {}
+        returns: dict[str, object] = {}
         for sym in symbols:
             df = feats.get(sym)
             if df is None or df.empty:
                 continue
             prices[sym] = float(df["close"].iloc[-1])
             fvec = {k: float(df.iloc[-1][k]) for k in df.columns if _is_num(df.iloc[-1][k])}
+            if "vol_20" in fvec:
+                vols[sym] = fvec["vol_20"]
+            if "ret_1d" in df.columns:
+                returns[sym] = df["ret_1d"].tail(60).dropna().to_numpy()
             reading = self.detector.classify(sym, fvec)
             selection = self.selector.select(reading)
             self.last_selections[sym] = selection
@@ -143,7 +171,10 @@ class Orchestrator:
                 intents[p.symbol] = Intent(p.symbol, SignalDirection.FLAT, 0.0, CASH, 0.0, "not in universe")
 
         # 4) Risk -> orders -> execute.
-        decision = self.risk.build_orders(account, positions, intents, prices, self.autonomy_level)
+        decision = self.risk.build_orders(
+            account, positions, intents, prices, self.autonomy_level,
+            vols=vols, returns=returns,
+        )
         submitted = self.execution.execute_decision(decision)
 
         # 5) Snapshot.

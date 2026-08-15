@@ -55,11 +55,16 @@ class Backtester:
         warmup: int = 210,
         slippage_bps: float = 1.0,
         commission_per_share: float = 0.0,
+        selector=None,
+        trade_start=None,
+        trade_end=None,
     ):
         self.bars = bars
         self.s = settings or get_settings()
         self.starting_cash = starting_cash
         self.warmup = warmup
+        self.trade_start = trade_start
+        self.trade_end = trade_end
         self.broker = BacktestBroker(
             bars, starting_cash=starting_cash,
             slippage_bps=slippage_bps, commission_per_share=commission_per_share,
@@ -67,6 +72,9 @@ class Backtester:
         # In-memory store so backtests don't pollute the live DB.
         self.store = Store(":memory:")
         self.orch = Orchestrator(self.s, self.broker, store=self.store)
+        # Optionally inject a pre-trained/alternative selector (e.g., LinUCB).
+        if selector is not None:
+            self.orch.selector = selector
         # Backtests run fully autonomous (no human approval queue).
         self.orch.autonomy_level = 2
         self.orch.state = EngineState.RUNNING
@@ -79,6 +87,12 @@ class Backtester:
 
         equity_curve: list[tuple[str, float]] = []
         for ts in timeline[self.warmup:]:
+            # Restrict the *trading* window (broker still only sees data <= now).
+            if self.trade_start is not None and ts < self.trade_start:
+                self.broker.set_now(ts)
+                continue
+            if self.trade_end is not None and ts > self.trade_end:
+                break
             self.broker.set_now(ts)
             self.orch.run_cycle()
             eq = self.broker.get_account().equity

@@ -128,15 +128,20 @@ def create_app() -> FastAPI:
     @app.get("/api/strategies")
     async def strategies(orch: Orchestrator = Depends(get_orch)) -> dict:
         pb = orch.playbook
+        sel = orch.selector
+        scores = {}
+        if hasattr(sel, "scores"):
+            scores = {r.value: v for r, v in sel.scores.items()}
         return {
+            "selector_type": "bandit" if sel.__class__.__name__ == "LinUCBSelector" else "rules",
             "playbook": [
                 {"name": st.name, "suited_regimes": sorted(r.value for r in st.suited_regimes),
                  "max_weight": st.max_weight}
                 for st in pb.values()
             ],
-            "scores": {r.value: v for r, v in orch.selector.scores.items()},
-            "pinned": orch.selector.pinned,
-            "blocked": sorted(orch.selector.blocked),
+            "scores": scores,
+            "pinned": sel.pinned,
+            "blocked": sorted(sel.blocked),
         }
 
     # ───────────── control (mutating; token-guarded) ─────────────

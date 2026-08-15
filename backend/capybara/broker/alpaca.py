@@ -16,6 +16,7 @@ from capybara.logging_setup import get_logger
 from capybara.models import (
     Account,
     Order,
+    OrderClass,
     OrderStatus,
     OrderType,
     Position,
@@ -166,29 +167,43 @@ class AlpacaBroker(BrokerAdapter):
 
     # ─────────────── Orders ───────────────
     def submit_order(self, order: Order) -> Order:
+        from alpaca.trading.enums import OrderClass as AOrderClass
         from alpaca.trading.enums import OrderSide
         from alpaca.trading.enums import TimeInForce as ATif
-        from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest
+        from alpaca.trading.requests import (
+            LimitOrderRequest,
+            MarketOrderRequest,
+            StopLossRequest,
+            TakeProfitRequest,
+        )
 
         side = OrderSide.BUY if order.side == Side.BUY else OrderSide.SELL
         tif = ATif.GTC if order.time_in_force == TimeInForce.GTC else ATif.DAY
         client_id = order.client_order_id or f"cap-{uuid.uuid4().hex[:16]}"
 
-        if order.order_type == OrderType.LIMIT and order.limit_price is not None:
+        # Bracket entry: attach protective stop-loss + take-profit (BUY entries only).
+        is_bracket = (
+            order.order_class == OrderClass.BRACKET
+            and order.side == Side.BUY
+            and order.stop_loss_price is not None
+        )
+        if is_bracket:
+            kwargs = dict(
+                symbol=order.symbol, qty=order.qty, side=side, time_in_force=ATif.GTC,
+                order_class=AOrderClass.BRACKET, client_order_id=client_id,
+                stop_loss=StopLossRequest(stop_price=round(order.stop_loss_price, 2)),
+            )
+            if order.take_profit_price is not None:
+                kwargs["take_profit"] = TakeProfitRequest(limit_price=round(order.take_profit_price, 2))
+            req = MarketOrderRequest(**kwargs)
+        elif order.order_type == OrderType.LIMIT and order.limit_price is not None:
             req = LimitOrderRequest(
-                symbol=order.symbol,
-                qty=order.qty,
-                side=side,
-                time_in_force=tif,
-                limit_price=order.limit_price,
-                client_order_id=client_id,
+                symbol=order.symbol, qty=order.qty, side=side, time_in_force=tif,
+                limit_price=order.limit_price, client_order_id=client_id,
             )
         else:
             req = MarketOrderRequest(
-                symbol=order.symbol,
-                qty=order.qty,
-                side=side,
-                time_in_force=tif,
+                symbol=order.symbol, qty=order.qty, side=side, time_in_force=tif,
                 client_order_id=client_id,
             )
         placed = self._trading.submit_order(order_data=req)

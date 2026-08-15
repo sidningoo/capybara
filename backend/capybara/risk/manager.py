@@ -26,11 +26,17 @@ from capybara.models import (
     AutonomyLevel,
     Intent,
     Order,
+    OrderClass,
     OrderStatus,
     Position,
     Side,
     SignalDirection,
     utcnow,
+)
+from capybara.risk.exposure import (
+    correlation_penalty,
+    enforce_sector_caps,
+    vol_target_scale,
 )
 
 log = get_logger("risk")
@@ -95,6 +101,8 @@ class RiskManager:
         intents: dict[str, Intent],
         prices: dict[str, float],
         autonomy_level: int,
+        vols: dict[str, float] | None = None,
+        returns: dict[str, "object"] | None = None,
     ) -> RiskDecision:
         decision = RiskDecision()
         equity = account.equity
@@ -102,31 +110,49 @@ class RiskManager:
             decision.notes.append("no equity; skipping")
             return decision
 
+        vols = vols or {}
         pos_by_symbol = {p.symbol: p for p in positions}
+        max_w = self.s.max_position_pct / 100.0
 
         # 1) Desired target weights from LONG intents (FLAT/SHORT -> 0 for now).
         targets: dict[str, float] = {}
         for sym, intent in intents.items():
             if intent.direction == SignalDirection.LONG and intent.target_weight > 0:
-                targets[sym] = min(intent.target_weight, self.s.max_position_pct / 100.0)
+                targets[sym] = min(intent.target_weight, max_w)
             else:
                 targets[sym] = 0.0
+
+        # 1b) Volatility targeting — inverse-vol sizing (smaller in high-vol names).
+        if self.s.enable_vol_targeting:
+            for sym in list(targets):
+                if targets[sym] > 0:
+                    scale = vol_target_scale(vols.get(sym), self.s.target_vol)
+                    targets[sym] = min(targets[sym] * scale, max_w)
 
         # 2) Enforce max concurrent positions — keep the highest-confidence targets.
         desired = {s: w for s, w in targets.items() if w > 0}
         if len(desired) > self.s.max_concurrent_positions:
-            ranked = sorted(
-                desired.keys(),
-                key=lambda s: intents[s].confidence,
-                reverse=True,
-            )
+            ranked = sorted(desired.keys(), key=lambda s: intents[s].confidence, reverse=True)
             keep = set(ranked[: self.s.max_concurrent_positions])
             for s in list(desired.keys()):
                 if s not in keep:
                     targets[s] = 0.0
                     decision.skipped.append((s, "max concurrent positions reached"))
 
-        # 3) Enforce gross exposure cap — scale all targets down proportionally.
+        # 2b) Correlation control — trim names highly correlated with the rest.
+        if self.s.enable_correlation_control and returns:
+            longs = [s for s, w in targets.items() if w > 0]
+            mult = correlation_penalty(returns, longs)
+            for s in longs:
+                if mult.get(s, 1.0) < 1.0:
+                    targets[s] *= mult[s]
+                    decision.notes.append(f"{s}: correlation trim x{mult[s]:.2f}")
+
+        # 3) Enforce sector caps, then the gross exposure cap.
+        if self.s.max_sector_pct < 100.0:
+            targets, sector_notes = enforce_sector_caps(targets, self.s.max_sector_pct)
+            decision.notes.extend(sector_notes)
+
         gross = sum(w for w in targets.values() if w > 0)
         cap = self.s.max_gross_exposure_pct / 100.0
         if gross > cap and gross > 0:
@@ -170,6 +196,24 @@ class RiskManager:
                 reason=(intent.reason if intent else "exit position (no active intent)"),
                 client_order_id=f"cap-{uuid.uuid4().hex[:16]}",
             )
+
+            # Attach a protective bracket to fresh long entries when the strategy
+            # provided a stop. Default take-profit = 2:1 reward:risk if unspecified.
+            is_new_entry = side == Side.BUY and current_shares == 0
+            if (
+                self.s.enable_bracket_orders
+                and is_new_entry
+                and intent is not None
+                and intent.stop_loss is not None
+                and intent.stop_loss < price
+            ):
+                order.order_class = OrderClass.BRACKET
+                order.stop_loss_price = intent.stop_loss
+                if intent.take_profit is not None and intent.take_profit > price:
+                    order.take_profit_price = intent.take_profit
+                else:
+                    order.take_profit_price = price + 2.0 * (price - intent.stop_loss)
+
             order.status = self._gate(order, delta_value, autonomy_level)
             decision.orders.append(order)
             rate_budget -= 1

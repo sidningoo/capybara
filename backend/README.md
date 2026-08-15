@@ -24,12 +24,26 @@ python -m capybara.cli backtest --synthetic --symbols "SPY,QQQ,AAPL" --days 600
 # Backtest on real Alpaca historical data (needs paper keys)
 python -m capybara.cli backtest --symbols "SPY,QQQ" --days 500
 
+# --- Phase 2: learning selector & validation ---
+# Train the LinUCB bandit selector offline and save the model
+python -m capybara.cli train --synthetic --days 700 --out ./bandit_model.npz
+# Backtest using the trained bandit selector
+python -m capybara.cli backtest --synthetic --bandit --model ./bandit_model.npz
+# Out-of-sample walk-forward validation
+python -m capybara.cli walkforward --synthetic --days 900 --folds 4
+# Learn the regime->strategy score table from history (feeds the rules selector)
+python -m capybara.cli attribution --synthetic --days 700 --out ./regime_scores.json
+
 # Start the live paper-trading loop + control API on :8000
 python -m capybara.cli run
 
 # Start ONLY the control API (no trading loop)
 python -m capybara.cli api
 ```
+
+**Selector choice:** set `CAPYBARA_SELECTOR=bandit` (with `CAPYBARA_BANDIT_MODEL_PATH`)
+to run the learned selector live, or keep `rules` and optionally point
+`CAPYBARA_SCORES_PATH` at a learned score table from `attribution`.
 
 ## Configuration
 

@@ -200,8 +200,9 @@ capybara/
 
 - **Phase 1 (this repo):** rules-based regime detection, 3-strategy playbook,
   regime→strategy selector, L1 autonomy, backtester, dashboard.
-- **Phase 2:** online **contextual bandit** selector (learns which strategy wins in
-  which conditions), richer guardrails, walk-forward validation.
+- **Phase 2 ✅:** **contextual-bandit (LinUCB)** selector that *learns* which strategy
+  wins in which conditions, walk-forward validation, backtest→selector feedback,
+  volatility-targeting + sector/correlation guardrails, and bracket/stop-loss orders.
 - **Phase 3:** **NLP/news-sentiment** signals feeding the selector, and
   **auto horizon selection** (the bot decides day-trade vs. swing per opportunity).
 

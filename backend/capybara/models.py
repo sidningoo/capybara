@@ -101,6 +101,11 @@ class TimeInForce(str, Enum):
     GTC = "gtc"
 
 
+class OrderClass(str, Enum):
+    SIMPLE = "simple"
+    BRACKET = "bracket"  # entry + attached take-profit + stop-loss
+
+
 class OrderStatus(str, Enum):
     NEW = "new"                  # created locally, not yet sent
     PENDING_APPROVAL = "pending_approval"  # HILT gate (autonomy L0/L1)
@@ -132,6 +137,10 @@ class Order:
     status: OrderStatus = OrderStatus.NEW
     filled_qty: float = 0.0
     filled_avg_price: float | None = None
+    # bracket / protective legs (optional)
+    order_class: OrderClass = OrderClass.SIMPLE
+    stop_loss_price: float | None = None
+    take_profit_price: float | None = None
     # provenance
     strategy: str = "manual"
     reason: str = ""
