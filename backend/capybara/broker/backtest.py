@@ -23,6 +23,7 @@ from capybara.models import (
     Account,
     Fill,
     Order,
+    OrderClass,
     OrderStatus,
     Position,
     Side,
@@ -56,10 +57,48 @@ class BacktestBroker(BrokerAdapter):
         self._orders: list[Order] = []
         self.fills: list[Fill] = []
         self._now: datetime | None = None
+        # symbol -> {"stop": price, "take": price} for resting protective legs
+        self._brackets: dict[str, dict] = {}
 
     # ─────────────── clock control (driven by the backtester) ───────────────
     def set_now(self, ts: datetime) -> None:
         self._now = ts
+        # Resting stop-loss / take-profit legs trigger intrabar, before the
+        # strategy re-evaluates on the close — this is how brackets behave live.
+        self._check_protective_exits(ts)
+
+    def _check_protective_exits(self, ts: datetime) -> None:
+        for sym, br in list(self._brackets.items()):
+            pos = self._positions.get(sym)
+            if not pos or pos[0] <= 0:
+                self._brackets.pop(sym, None)
+                continue
+            df = self._bars.get(sym)
+            if df is None or ts not in df.index:
+                continue
+            bar = df.loc[ts]
+            low, high, open_ = float(bar["low"]), float(bar["high"]), float(bar["open"])
+            stop, take = br.get("stop"), br.get("take")
+            exit_px, kind = None, None
+            if stop is not None and low <= stop:
+                exit_px, kind = min(stop, open_), "stop-loss"   # gap-through fills at open
+            elif take is not None and high >= take:
+                exit_px, kind = max(take, open_), "take-profit"
+            if exit_px is None:
+                continue
+            qty = pos[0]
+            self._cash += exit_px * qty - self._commission * qty
+            self._apply_position(sym, -qty, exit_px)
+            self._brackets.pop(sym, None)
+            oid = f"bt-{kind}-{len(self._orders)}"
+            o = Order(symbol=sym, side=Side.SELL, qty=qty, strategy="bracket", reason=f"{kind} exit")
+            o.filled_qty = qty
+            o.filled_avg_price = exit_px
+            o.status = OrderStatus.FILLED
+            o.broker_order_id = oid
+            o.updated_at = ts
+            self._orders.append(o)
+            self.fills.append(Fill(sym, Side.SELL, qty, exit_px, oid, ts))
 
     @property
     def now(self) -> datetime | None:
@@ -163,6 +202,12 @@ class BacktestBroker(BrokerAdapter):
                 commission = self._commission * qty
             self._cash -= cost + commission
             self._apply_position(order.symbol, qty, fill_px)
+            # Record the resting protective legs for a bracket entry.
+            if order.order_class == OrderClass.BRACKET and order.stop_loss_price is not None:
+                self._brackets[order.symbol] = {
+                    "stop": order.stop_loss_price,
+                    "take": order.take_profit_price,
+                }
         else:  # SELL
             held = self._positions.get(order.symbol, [0.0, 0.0])[0]
             qty = min(qty, held)  # long-only: cannot sell more than held
@@ -173,6 +218,9 @@ class BacktestBroker(BrokerAdapter):
                 return order
             self._cash += fill_px * qty - commission
             self._apply_position(order.symbol, -qty, fill_px)
+            # Selling out clears any resting bracket.
+            if self._positions.get(order.symbol, [0.0])[0] <= 0:
+                self._brackets.pop(order.symbol, None)
 
         order.qty = qty
         order.filled_qty = qty

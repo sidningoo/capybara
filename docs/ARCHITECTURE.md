@@ -99,6 +99,22 @@ The orchestrator runs in a background thread; FastAPI runs on the asyncio loop. 
 queues via `call_soon_threadsafe`, which the `/ws` handler forwards to the browser.
 The SQLite event log remains the durable record if a client is slow or disconnected.
 
+## Phase 2 additions (learning selector & risk hardening)
+
+| Component | File | Responsibility |
+| --- | --- | --- |
+| Context scaler | `selector/context.py` | Fixed feature list + standardization; the model's input vector. |
+| Bandit selector | `selector/bandit.py` | LinUCB (disjoint per-arm) with a cash baseline; same `select()` API as the rules selector, so it's swappable via `CAPYBARA_SELECTOR`. |
+| Trainer + walk-forward | `backtest/walkforward.py` | Off-policy offline training from realized forward returns; rolling out-of-sample validation. |
+| Attribution | `backtest/attribution.py` | Learns the Stage-1 regime→strategy score table from history (`load_scores`). |
+| Exposure controls | `risk/exposure.py` | Sector map, inverse-vol sizing, sector caps, correlation trimming — applied inside `RiskManager.build_orders`. |
+| Brackets | `models.py` / `broker/*` | `OrderClass.BRACKET` with stop-loss + take-profit; Alpaca native + simulated intrabar in the backtester. |
+
+**Selector interface stability:** both `StrategySelector` (rules) and `LinUCBSelector`
+(learned) expose `select(reading) -> Selection`, plus `pinned` / `blocked`. The
+orchestrator's `_build_selector()` picks one from config; nothing downstream changes.
+This is the "keep the seams stable so ML upgrades are drop-in" principle in action.
+
 ## Deployment topology
 
 ```

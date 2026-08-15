@@ -20,17 +20,22 @@ selector's `select()`), so upgrades are drop-in.
 - **Backtester** (validation harness) with metrics + per-strategy attribution.
 - **FastAPI** control plane + **Next.js/Vercel dashboard** (monitor + full HILT).
 
-## Phase 2 — Learning selector & hardening
+## Phase 2 — Learning selector & hardening ✅ (shipped)
 
-- **Contextual bandit selector** (LinUCB / Thompson sampling): context = feature
-  vector, arms = strategies, reward = realized risk-adjusted P&L. Learns online;
-  priors seeded from backtests. Replaces the static score table behind the same API.
-- **Walk-forward validation** + overfitting guards (out-of-sample, purged CV).
-- **Richer guardrails**: per-sector exposure, correlation limits, volatility targeting.
-- **Backtest → selector feedback loop** wired end-to-end (`load_scores`).
-- **Bracket / stop-loss orders** natively via Alpaca (the strategies already emit
-  stop levels).
-- **Postgres/TimescaleDB** option for the store; metrics/alerting (Prometheus-style).
+- ✅ **Contextual bandit selector** (LinUCB, disjoint per-arm): context = standardized
+  feature vector, arms = strategies + cash, reward = realized forward return. Trained
+  offline, updatable online, drop-in behind the same `select()` API. (`selector/bandit.py`)
+- ✅ **Walk-forward validation**: rolling train→test folds, strictly out-of-sample.
+  (`backtest/walkforward.py`, CLI `walkforward`)
+- ✅ **Backtest → selector feedback loop**: learns the Stage-1 regime→strategy score
+  table from history (`backtest/attribution.py`, CLI `attribution`, `load_scores`).
+- ✅ **Richer guardrails**: volatility targeting (inverse-vol sizing), per-sector
+  exposure caps, and correlation-aware trimming. (`risk/exposure.py`)
+- ✅ **Bracket / stop-loss orders**: attached to entries via Alpaca; simulated
+  intrabar in the backtester so protective exits are validated offline.
+
+Deferred to a later hardening pass:
+- **Postgres/TimescaleDB** option for the store; Prometheus-style metrics.
 - **Trade-updates WebSocket** for immediate fill events (vs. poll-based reconcile).
 
 ## Phase 3 — NLP signals & self-selected horizon

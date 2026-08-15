@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     max_orders_per_min: int = Field(default=10, alias="CAPYBARA_MAX_ORDERS_PER_MIN")
     approval_order_notional: float = Field(default=5000.0, alias="CAPYBARA_APPROVAL_ORDER_NOTIONAL")
 
+    # --- Risk hardening (Phase 2) ---
+    enable_vol_targeting: bool = Field(default=True, alias="CAPYBARA_ENABLE_VOL_TARGETING")
+    target_vol: float = Field(default=0.15, alias="CAPYBARA_TARGET_VOL")  # annualized
+    max_sector_pct: float = Field(default=40.0, alias="CAPYBARA_MAX_SECTOR_PCT")
+    enable_correlation_control: bool = Field(default=True, alias="CAPYBARA_ENABLE_CORRELATION_CONTROL")
+    enable_bracket_orders: bool = Field(default=True, alias="CAPYBARA_ENABLE_BRACKET_ORDERS")
+
+    # --- Selector (Phase 2) ---
+    selector_type: str = Field(default="rules", alias="CAPYBARA_SELECTOR")  # "rules" | "bandit"
+    bandit_model_path: str = Field(default="./bandit_model.npz", alias="CAPYBARA_BANDIT_MODEL_PATH")
+    scores_path: str = Field(default="", alias="CAPYBARA_SCORES_PATH")  # optional Stage-1 score table
+
     # --- Persistence ---
     db_path: str = Field(default="./capybara.db", alias="CAPYBARA_DB_PATH")
 

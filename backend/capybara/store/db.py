@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from capybara.logging_setup import get_logger
-from capybara.models import Fill, Order, OrderStatus, OrderType, Side, TimeInForce
+from capybara.models import Fill, Order, OrderClass, OrderStatus, OrderType, Side, TimeInForce
 
 log = get_logger("store")
 
@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS orders (
     filled_avg_price REAL,
     strategy TEXT,
     reason TEXT,
+    order_class TEXT DEFAULT 'simple',
+    stop_loss_price REAL,
+    take_profit_price REAL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -82,8 +85,20 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            self._migrate()
             self._conn.commit()
         log.info("Store ready at %s", path)
+
+    def _migrate(self) -> None:
+        """Best-effort additive migrations for pre-existing databases."""
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(orders)").fetchall()}
+        for name, decl in (
+            ("order_class", "TEXT DEFAULT 'simple'"),
+            ("stop_loss_price", "REAL"),
+            ("take_profit_price", "REAL"),
+        ):
+            if name not in cols:
+                self._conn.execute(f"ALTER TABLE orders ADD COLUMN {name} {decl}")
 
     def close(self) -> None:
         with self._lock:
@@ -111,8 +126,9 @@ class Store:
             self._conn.execute(
                 """INSERT INTO orders(client_order_id, broker_order_id, symbol, side, qty,
                         order_type, time_in_force, limit_price, status, filled_qty,
-                        filled_avg_price, strategy, reason, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        filled_avg_price, strategy, reason, order_class, stop_loss_price,
+                        take_profit_price, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(client_order_id) DO UPDATE SET
                         broker_order_id=excluded.broker_order_id,
                         status=excluded.status,
@@ -125,7 +141,8 @@ class Store:
                     order.client_order_id, order.broker_order_id, order.symbol, order.side.value,
                     order.qty, order.order_type.value, order.time_in_force.value, order.limit_price,
                     order.status.value, order.filled_qty, order.filled_avg_price, order.strategy,
-                    order.reason, order.created_at.isoformat(), order.updated_at.isoformat(),
+                    order.reason, order.order_class.value, order.stop_loss_price,
+                    order.take_profit_price, order.created_at.isoformat(), order.updated_at.isoformat(),
                 ),
             )
             self._conn.commit()
@@ -165,6 +182,9 @@ class Store:
             filled_avg_price=d["filled_avg_price"],
             strategy=d["strategy"] or "manual",
             reason=d["reason"] or "",
+            order_class=OrderClass(d["order_class"] or "simple"),
+            stop_loss_price=d["stop_loss_price"],
+            take_profit_price=d["take_profit_price"],
             client_order_id=d["client_order_id"],
             broker_order_id=d["broker_order_id"],
         )
