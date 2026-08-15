@@ -139,6 +139,63 @@ export function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
+// ───────────────────────── Sentiment ─────────────────────────
+
+// Classify a sentiment score in [-1, 1] into a semantic bucket.
+export function sentimentBucket(score: number): "positive" | "negative" | "neutral" {
+  if (score > 0.15) return "positive";
+  if (score < -0.15) return "negative";
+  return "neutral";
+}
+
+// A compact bidirectional bar for a sentiment score in [-1, 1]. The bar fills
+// from the center: green to the right for positive, red to the left for
+// negative, slate for neutral.
+export function SentimentBar({ score }: { score: number }) {
+  const clamped = Math.max(-1, Math.min(1, score));
+  const bucket = sentimentBucket(clamped);
+  const magnitude = Math.abs(clamped) * 50; // half-width percentage
+  const fillColor =
+    bucket === "positive"
+      ? "bg-emerald-500"
+      : bucket === "negative"
+        ? "bg-red-500"
+        : "bg-slate-500";
+  const textColor =
+    bucket === "positive"
+      ? "text-emerald-300"
+      : bucket === "negative"
+        ? "text-red-300"
+        : "text-slate-400";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative h-1.5 w-16 overflow-hidden rounded-full bg-base-700">
+        {/* center divider */}
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-base-600" />
+        <div
+          className={`absolute top-0 h-full ${fillColor}`}
+          style={
+            clamped >= 0
+              ? { left: "50%", width: `${magnitude}%` }
+              : { right: "50%", width: `${magnitude}%` }
+          }
+        />
+      </div>
+      <span className={`tabular-nums text-xs ${textColor}`}>
+        {clamped >= 0 ? "+" : ""}
+        {clamped.toFixed(2)}
+      </span>
+    </div>
+  );
+}
+
+// A small chip for a trading horizon: "intraday" vs "swing".
+export function HorizonChip({ horizon }: { horizon: string }) {
+  const h = (horizon || "").toLowerCase();
+  const color = h === "intraday" ? "sky" : "slate";
+  return <Chip color={color}>{horizon || "—"}</Chip>;
+}
+
 // ───────────────────────── Empty state ─────────────────────────
 
 export function Empty({ children }: { children: ReactNode }) {

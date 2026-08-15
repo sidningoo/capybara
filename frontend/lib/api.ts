@@ -44,6 +44,18 @@ export interface Selection {
   confidence: number;
   score: number;
   reason: string;
+  sentiment: number;
+  horizon: string;
+}
+
+export interface NewsSentiment {
+  score: number;
+  n_articles: number;
+  headlines: string[];
+}
+
+export interface News {
+  sentiment: Record<string, NewsSentiment>;
 }
 
 export interface Guardrails {
@@ -111,6 +123,8 @@ export interface Decision {
   strategy: string;
   score: number;
   reason: string;
+  sentiment?: number;
+  horizon?: string;
 }
 
 export interface EquityPoint {
@@ -222,6 +236,7 @@ export const api = {
     apiGet<{ equity_curve: EquityPoint[] }>("/api/equity-curve", signal),
   strategies: (signal?: AbortSignal) =>
     apiGet<Strategies>("/api/strategies", signal),
+  news: (signal?: AbortSignal) => apiGet<News>("/api/news", signal),
 };
 
 // ───────────────────────── POST endpoints ─────────────────────────

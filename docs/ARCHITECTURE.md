@@ -115,6 +115,21 @@ The SQLite event log remains the durable record if a client is slow or disconnec
 orchestrator's `_build_selector()` picks one from config; nothing downstream changes.
 This is the "keep the seams stable so ML upgrades are drop-in" principle in action.
 
+## Phase 3 additions (news sentiment & auto horizon)
+
+| Component | File | Responsibility |
+| --- | --- | --- |
+| Sentiment | `data/sentiment.py` | `SentimentAnalyzer` (dependency-free finance lexicon w/ negation), `SentimentProvider` (Null offline + lazy Alpaca-news), and `SentimentPolicy` (veto new longs on bad news, tilt size by score). |
+| Horizon | `selector/horizon.py` | `HorizonPolicy` decides intraday vs. swing per symbol from volatility, momentum acceleration, and news catalysts. |
+
+**Where they plug in:** the orchestrator fetches sentiment once per cycle, computes a
+horizon per symbol, attaches both to the `Selection` (shown in the UI + logged), and
+runs the `SentimentPolicy` over the intents *before* the risk manager sizes them — so
+news affects behavior through the same intent→risk→execution path as everything else.
+Sentiment is a portfolio/selector-level signal, deliberately kept out of the bandit's
+trained context to avoid a train/live feature mismatch (documented in the roadmap).
+The data cadence is configurable via `CAPYBARA_TIMEFRAME` (swing daily bars by default).
+
 ## Deployment topology
 
 ```

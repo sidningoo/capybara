@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS decisions (
     confidence REAL,
     strategy TEXT,
     score REAL,
-    reason TEXT
+    reason TEXT,
+    sentiment REAL DEFAULT 0,
+    horizon TEXT DEFAULT 'swing'
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
@@ -99,6 +101,10 @@ class Store:
         ):
             if name not in cols:
                 self._conn.execute(f"ALTER TABLE orders ADD COLUMN {name} {decl}")
+        dcols = {r[1] for r in self._conn.execute("PRAGMA table_info(decisions)").fetchall()}
+        for name, decl in (("sentiment", "REAL DEFAULT 0"), ("horizon", "TEXT DEFAULT 'swing'")):
+            if name not in dcols:
+                self._conn.execute(f"ALTER TABLE decisions ADD COLUMN {name} {decl}")
 
     def close(self) -> None:
         with self._lock:
@@ -225,12 +231,15 @@ class Store:
     def record_decision(
         self, ts: datetime, symbol: str, regime: str, confidence: float,
         strategy: str, score: float, reason: str,
+        sentiment: float = 0.0, horizon: str = "swing",
     ) -> None:
         with self._lock:
             self._conn.execute(
-                """INSERT INTO decisions(timestamp, symbol, regime, confidence, strategy, score, reason)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (ts.isoformat(), symbol, regime, confidence, strategy, score, reason),
+                """INSERT INTO decisions(timestamp, symbol, regime, confidence, strategy,
+                        score, reason, sentiment, horizon)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (ts.isoformat(), symbol, regime, confidence, strategy, score, reason,
+                 sentiment, horizon),
             )
             self._conn.commit()
 

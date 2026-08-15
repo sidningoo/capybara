@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from capybara.logging_setup import get_logger
-from capybara.models import Regime, RegimeReading, utcnow
+from capybara.models import Horizon, Regime, RegimeReading, utcnow
 from capybara.strategies.registry import CASH
 
 log = get_logger("selector")
@@ -50,6 +50,8 @@ class Selection:
     regime: Regime
     confidence: float
     reason: str
+    sentiment: float = 0.0                 # news sentiment [-1..1] at decision time
+    horizon: Horizon = Horizon.SWING       # chosen holding horizon
     timestamp: datetime = field(default_factory=utcnow)
 
     @property

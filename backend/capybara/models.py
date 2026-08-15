@@ -71,6 +71,13 @@ class SignalDirection(str, Enum):
     SHORT = "short"
 
 
+class Horizon(str, Enum):
+    """Intended holding horizon for a trade. Phase 3 lets the bot choose this per
+    opportunity instead of being fixed to swing."""
+    SWING = "swing"        # days-to-weeks (default; daily bars)
+    INTRADAY = "intraday"  # hours (requires the intraday data path)
+
+
 @dataclass(frozen=True, slots=True)
 class Intent:
     """What a strategy *wants* for one symbol, expressed as a target.
@@ -87,6 +94,7 @@ class Intent:
     reason: str = ""                     # human-readable rationale (shown in UI)
     stop_loss: float | None = None       # optional absolute price
     take_profit: float | None = None     # optional absolute price
+    horizon: Horizon = Horizon.SWING     # intended holding horizon
     timestamp: datetime = field(default_factory=utcnow)
 
 

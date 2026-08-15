@@ -121,6 +121,11 @@ def create_app() -> FastAPI:
     async def decisions(limit: int = 200, orch: Orchestrator = Depends(get_orch)) -> dict:
         return {"decisions": orch.store.get_decisions(limit=limit)}
 
+    @app.get("/api/news")
+    async def news(orch: Orchestrator = Depends(get_orch)) -> dict:
+        """Latest per-symbol news sentiment computed on the last cycle."""
+        return {"sentiment": orch.last_sentiments}
+
     @app.get("/api/equity-curve")
     async def equity_curve(orch: Orchestrator = Depends(get_orch)) -> dict:
         return {"equity_curve": orch.store.get_equity_curve()}

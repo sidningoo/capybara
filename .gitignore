@@ -24,5 +24,10 @@ out/
 *.sqlite3
 *.log
 
+# Trained model artifacts / learned tables
+*.npz
+regime_scores.json
+bandit_model*.npz
+
 # OS
 .DS_Store
