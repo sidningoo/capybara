@@ -9,6 +9,7 @@ import { EquityCurve } from "@/components/EquityCurve";
 import { EventLog } from "@/components/EventLog";
 import { Header } from "@/components/Header";
 import { ManualTrade } from "@/components/ManualTrade";
+import { NewsPanel } from "@/components/NewsPanel";
 import { Orders } from "@/components/Orders";
 import { Positions } from "@/components/Positions";
 import { Selections } from "@/components/Selections";
@@ -50,6 +51,11 @@ export default function Page() {
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Selections status={status} />
           <StrategiesPanel refreshKey={version} onChanged={refresh} />
+        </div>
+
+        {/* News & sentiment. */}
+        <div className="mb-4">
+          <NewsPanel refreshKey={version} />
         </div>
 
         {/* Positions full width. */}

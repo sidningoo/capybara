@@ -18,17 +18,24 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from capybara.broker.base import BrokerAdapter
 from capybara.config import Settings
 from capybara.data.market_data import MarketData
+from capybara.data.sentiment import (
+    AlpacaNewsSentimentProvider,
+    NullSentimentProvider,
+    SentimentPolicy,
+)
 from capybara.execution.events import EventBus
 from capybara.execution.order_manager import OrderManager
 from capybara.logging_setup import get_logger
-from capybara.models import EngineState, Intent, Regime, SignalDirection
+from capybara.models import EngineState, Horizon, Intent, Regime, SignalDirection
 from capybara.regime.detector import RegimeDetector
 from capybara.risk.manager import RiskGuardrails, RiskManager
+from capybara.selector.horizon import HorizonPolicy
 from capybara.selector.selector import Selection, StrategySelector
 from capybara.store.db import Store
 from capybara.strategies.registry import CASH, default_playbook
@@ -49,10 +56,17 @@ class Orchestrator:
         self.store = store or Store(settings.db_path)
         self.bus = bus or EventBus()
 
-        self.market = MarketData(broker, timeframe="1Day", lookback=300)
+        self.market = MarketData(broker, timeframe=settings.timeframe, lookback=300)
         self.detector = RegimeDetector()
         self.selector = self._build_selector()
         self.playbook = default_playbook()
+        self.sentiment = self._build_sentiment_provider()
+        self.sentiment_policy = SentimentPolicy(
+            neg_veto=settings.sentiment_neg_veto,
+            tilt_k=settings.sentiment_tilt_k,
+            enabled=settings.enable_sentiment,
+        )
+        self.horizon_policy = HorizonPolicy(enabled=settings.enable_auto_horizon)
         self.risk = RiskManager(settings)
         self.guardrails = RiskGuardrails(
             max_daily_loss_pct=settings.max_daily_loss_pct,
@@ -66,6 +80,7 @@ class Orchestrator:
 
         # last-tick snapshots (for the dashboard)
         self.last_selections: dict[str, Selection] = {}
+        self.last_sentiments: dict[str, dict] = {}
         self.last_cycle_at: datetime | None = None
         self._current_day: str | None = None
 
@@ -93,6 +108,16 @@ class Orchestrator:
             except Exception as exc:
                 log.warning("Could not load scores from %s: %s", self.s.scores_path, exc)
         return sel
+
+    def _build_sentiment_provider(self):
+        """Alpaca news sentiment when creds + enabled; otherwise neutral (offline)."""
+        if self.s.enable_sentiment and self.s.has_alpaca_creds:
+            log.info("Sentiment: Alpaca news provider (lookback %dh).", self.s.sentiment_lookback_hours)
+            return AlpacaNewsSentimentProvider(
+                self.s.alpaca_api_key, self.s.alpaca_secret_key,
+                lookback_hours=self.s.sentiment_lookback_hours,
+            )
+        return NullSentimentProvider()
 
     # ───────────── clock ─────────────
     def _now(self) -> datetime:
@@ -127,11 +152,18 @@ class Orchestrator:
             self.store.record_equity(now, account.equity, account.cash)
             return {"state": self.state.value, "halted": self.state == EngineState.HALTED}
 
-        # 1) Features per symbol.
+        # 1) Features per symbol + news sentiment for the universe.
         symbols = self.s.universe_list
         feats = self.market.features(symbols)
+        sentiments = self.sentiment.get(symbols)
+        self.last_sentiments = {
+            sym: {"score": round(r.score, 3), "n_articles": r.n_articles,
+                  "headlines": list(r.headlines)}
+            for sym, r in sentiments.items()
+        }
+        held = {p.symbol for p in positions}
 
-        # 2) Regime -> selection -> intent, per symbol.
+        # 2) Regime -> selection -> intent, per symbol (with sentiment + horizon).
         intents: dict[str, Intent] = {}
         prices: dict[str, float] = {}
         vols: dict[str, float] = {}
@@ -146,21 +178,31 @@ class Orchestrator:
                 vols[sym] = fvec["vol_20"]
             if "ret_1d" in df.columns:
                 returns[sym] = df["ret_1d"].tail(60).dropna().to_numpy()
+
+            senti = sentiments.get(sym)
+            senti_score = senti.score if senti else 0.0
+            horizon, horizon_reason = self.horizon_policy.decide(fvec, senti_score)
+
             reading = self.detector.classify(sym, fvec)
             selection = self.selector.select(reading)
+            selection = replace(selection, sentiment=round(senti_score, 3), horizon=horizon)
             self.last_selections[sym] = selection
             self.store.record_decision(
                 now, sym, reading.regime.value, reading.confidence,
-                selection.strategy, selection.score, selection.reason,
+                selection.strategy, selection.score,
+                selection.reason + f" | horizon: {horizon_reason}",
+                sentiment=senti_score, horizon=horizon.value,
             )
             if selection.is_cash:
                 # Exit intent (flat) so the risk manager unwinds any holding.
-                intents[sym] = Intent(sym, SignalDirection.FLAT, 0.0, CASH, 0.0, selection.reason)
+                intents[sym] = Intent(sym, SignalDirection.FLAT, 0.0, CASH, 0.0, selection.reason,
+                                      horizon=horizon)
             else:
                 strat = self.playbook.get(selection.strategy)
-                intents[sym] = strat.generate(sym, df) if strat else Intent(
+                base = strat.generate(sym, df) if strat else Intent(
                     sym, SignalDirection.FLAT, 0.0, CASH, 0.0, "unknown strategy"
                 )
+                intents[sym] = replace(base, horizon=horizon)
 
         # 3) Also ensure held symbols outside the universe get exit intents.
         for p in positions:
@@ -169,6 +211,11 @@ class Orchestrator:
                 if px:
                     prices[p.symbol] = px
                 intents[p.symbol] = Intent(p.symbol, SignalDirection.FLAT, 0.0, CASH, 0.0, "not in universe")
+
+        # 3b) Sentiment policy: veto new longs on bad news, tilt size otherwise.
+        senti_notes = self.sentiment_policy.apply(intents, sentiments, held)
+        for note in senti_notes:
+            self.store.log_event("sentiment_action", {"note": note})
 
         # 4) Risk -> orders -> execute.
         decision = self.risk.build_orders(
@@ -300,6 +347,8 @@ class Orchestrator:
                     "regime": sel.regime.value,
                     "confidence": round(sel.confidence, 3),
                     "score": round(sel.score, 3),
+                    "sentiment": round(sel.sentiment, 3),
+                    "horizon": sel.horizon.value,
                     "reason": sel.reason,
                 }
                 for sym, sel in self.last_selections.items()

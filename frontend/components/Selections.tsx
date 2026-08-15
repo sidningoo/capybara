@@ -1,7 +1,15 @@
 "use client";
 
 import { fmtNum, Status } from "@/lib/api";
-import { Chip, ConfidenceBar, Empty, Panel, regimeColor } from "./ui";
+import {
+  Chip,
+  ConfidenceBar,
+  Empty,
+  HorizonChip,
+  Panel,
+  regimeColor,
+  SentimentBar,
+} from "./ui";
 
 export function Selections({ status }: { status: Status | null }) {
   const selections = status?.selections ?? {};
@@ -21,6 +29,8 @@ export function Selections({ status }: { status: Status | null }) {
                 <th className="py-2 pr-3 font-medium">Strategy</th>
                 <th className="py-2 pr-3 font-medium">Confidence</th>
                 <th className="py-2 pr-3 font-medium">Score</th>
+                <th className="py-2 pr-3 font-medium">Sentiment</th>
+                <th className="py-2 pr-3 font-medium">Horizon</th>
                 <th className="py-2 font-medium">Reason</th>
               </tr>
             </thead>
@@ -42,6 +52,12 @@ export function Selections({ status }: { status: Status | null }) {
                   </td>
                   <td className="py-2 pr-3 tabular-nums text-slate-300">
                     {fmtNum(sel.score, 3)}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <SentimentBar score={sel.sentiment ?? 0} />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <HorizonChip horizon={sel.horizon} />
                   </td>
                   <td className="max-w-xs truncate py-2 text-slate-400" title={sel.reason}>
                     {sel.reason}

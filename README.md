@@ -203,8 +203,9 @@ capybara/
 - **Phase 2 ✅:** **contextual-bandit (LinUCB)** selector that *learns* which strategy
   wins in which conditions, walk-forward validation, backtest→selector feedback,
   volatility-targeting + sector/correlation guardrails, and bracket/stop-loss orders.
-- **Phase 3:** **NLP/news-sentiment** signals feeding the selector, and
-  **auto horizon selection** (the bot decides day-trade vs. swing per opportunity).
+- **Phase 3 ✅:** **news/NLP sentiment** (the bot reads headlines, vetoes trades on
+  bad news, and tilts size by sentiment) and **auto horizon selection** (it decides
+  day-trade vs. swing per opportunity). Surfaced in the dashboard.
 
 Full detail in **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 

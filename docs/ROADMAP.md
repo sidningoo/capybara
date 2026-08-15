@@ -38,16 +38,21 @@ Deferred to a later hardening pass:
 - **Postgres/TimescaleDB** option for the store; Prometheus-style metrics.
 - **Trade-updates WebSocket** for immediate fill events (vs. poll-based reconcile).
 
-## Phase 3 — NLP signals & self-selected horizon
+## Phase 3 — NLP signals & self-selected horizon ✅ (shipped)
 
-- **NLP / news-sentiment** features (headlines, earnings, filings) folded into the
-  selector's context — the model can react to *why* a move is happening, not just the
-  price pattern.
-- **Auto horizon selection**: the selector decides **day-trade vs. swing** per
-  opportunity, which in turn drives the data cadence and order style. This is the
-  "it decides which trade is for which timeframe" capability.
-- Intraday data path (minute bars, streaming) activated only when the selector picks
-  a short-horizon play — the same engine, a faster clock.
+- ✅ **News / NLP sentiment** (`data/sentiment.py`): a pluggable `SentimentProvider`
+  (offline lexicon analyzer + a lazy Alpaca-news provider) scores headlines per symbol.
+  A `SentimentPolicy` acts on it explainably: **veto new longs on strongly negative
+  news** and **tilt position size** with the score. The bot reads the news so you
+  don't have to.
+- ✅ **Auto horizon selection** (`selector/horizon.py`): a `HorizonPolicy` decides
+  **day-trade (intraday) vs. swing** per opportunity from volatility, momentum
+  acceleration, and news catalysts. Surfaced per symbol in the dashboard.
+- ✅ **Intraday data-path config** (`CAPYBARA_TIMEFRAME`): the same engine runs on a
+  faster clock (1Min/5Min/15Min/1Hour) or the default daily swing clock.
+
+Phase-3.5 follow-on: actually *route* intraday-flagged opportunities to the fast clock
+automatically (dual-cadence loop) and add a transformer-based sentiment model.
 
 ## Explicitly out of scope (for now)
 

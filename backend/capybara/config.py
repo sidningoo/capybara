@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     bandit_model_path: str = Field(default="./bandit_model.npz", alias="CAPYBARA_BANDIT_MODEL_PATH")
     scores_path: str = Field(default="", alias="CAPYBARA_SCORES_PATH")  # optional Stage-1 score table
 
+    # --- Sentiment & horizon (Phase 3) ---
+    enable_sentiment: bool = Field(default=True, alias="CAPYBARA_ENABLE_SENTIMENT")
+    sentiment_neg_veto: float = Field(default=-0.5, alias="CAPYBARA_SENTIMENT_NEG_VETO")
+    sentiment_tilt_k: float = Field(default=0.4, alias="CAPYBARA_SENTIMENT_TILT_K")
+    sentiment_lookback_hours: int = Field(default=48, alias="CAPYBARA_SENTIMENT_LOOKBACK_HOURS")
+    enable_auto_horizon: bool = Field(default=True, alias="CAPYBARA_ENABLE_AUTO_HORIZON")
+    # Data path: "1Day" (swing, default), "1Hour", "15Min", "5Min", "1Min" (intraday).
+    timeframe: str = Field(default="1Day", alias="CAPYBARA_TIMEFRAME")
+
     # --- Persistence ---
     db_path: str = Field(default="./capybara.db", alias="CAPYBARA_DB_PATH")
 
