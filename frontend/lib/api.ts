@@ -146,6 +146,33 @@ export interface Strategies {
   blocked: string[];
 }
 
+export interface PerStrategyStat {
+  round_trips: number;
+  win_rate_pct: number;
+  net_pnl: number;
+  profit_factor: number | null;
+}
+
+export interface Analytics {
+  equity_start: number;
+  equity_current: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  sharpe: number;
+  n_fills: number;
+  n_round_trips: number;
+  win_rate_pct: number;
+  profit_factor: number;
+  realized_pnl: number;
+  per_strategy: Record<string, PerStrategyStat>;
+  summary: string;
+}
+
+export interface NotifyTestResult {
+  enabled: boolean;
+  channels: string[];
+}
+
 // ───────────────────────── Token helpers ─────────────────────────
 
 export function getToken(): string {
@@ -237,6 +264,10 @@ export const api = {
   strategies: (signal?: AbortSignal) =>
     apiGet<Strategies>("/api/strategies", signal),
   news: (signal?: AbortSignal) => apiGet<News>("/api/news", signal),
+  analytics: (signal?: AbortSignal) =>
+    apiGet<Analytics>("/api/analytics", signal),
+  digest: (signal?: AbortSignal) =>
+    apiGet<{ digest: string }>("/api/digest", signal),
 };
 
 // ───────────────────────── POST endpoints ─────────────────────────
@@ -252,6 +283,7 @@ export const control = {
   pin: (strategy: string | null) => apiPost("/api/control/pin", { strategy }),
   block: (strategy: string, blocked: boolean) =>
     apiPost("/api/control/block", { strategy, blocked }),
+  notifyTest: () => apiPost<NotifyTestResult>("/api/notify/test"),
 };
 
 export const orders = {

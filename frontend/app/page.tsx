@@ -3,8 +3,10 @@
 import { API_BASE, fmtDateTime } from "@/lib/api";
 import { useLiveStatus } from "@/lib/useLiveStatus";
 import { AccountSummary } from "@/components/AccountSummary";
+import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { Approvals } from "@/components/Approvals";
 import { ControlPanel } from "@/components/ControlPanel";
+import { DigestPanel } from "@/components/DigestPanel";
 import { EquityCurve } from "@/components/EquityCurve";
 import { EventLog } from "@/components/EventLog";
 import { Header } from "@/components/Header";
@@ -45,6 +47,14 @@ export default function Page() {
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <AccountSummary status={status} />
           <EquityCurve refreshKey={version} />
+        </div>
+
+        {/* Performance analytics (full width) + daily digest. */}
+        <div className="mb-4">
+          <AnalyticsPanel refreshKey={version} />
+        </div>
+        <div className="mb-4">
+          <DigestPanel refreshKey={version} />
         </div>
 
         {/* Selections + strategies. */}
