@@ -173,6 +173,23 @@ export interface NotifyTestResult {
   channels: string[];
 }
 
+export interface EffectiveRisk {
+  max_position_pct: number;
+  max_concurrent_positions: number;
+  max_gross_exposure_pct: number;
+  max_daily_loss_pct: number;
+  max_drawdown_pct: number;
+  target_vol: number;
+  max_sector_pct: number;
+}
+
+export interface Preferences {
+  risk_profile: string;
+  available_profiles: string[];
+  watchlist: string[];
+  effective_risk: EffectiveRisk;
+}
+
 // ───────────────────────── Token helpers ─────────────────────────
 
 export function getToken(): string {
@@ -268,6 +285,8 @@ export const api = {
     apiGet<Analytics>("/api/analytics", signal),
   digest: (signal?: AbortSignal) =>
     apiGet<{ digest: string }>("/api/digest", signal),
+  preferences: (signal?: AbortSignal) =>
+    apiGet<Preferences>("/api/preferences", signal),
 };
 
 // ───────────────────────── POST endpoints ─────────────────────────
@@ -284,6 +303,10 @@ export const control = {
   block: (strategy: string, blocked: boolean) =>
     apiPost("/api/control/block", { strategy, blocked }),
   notifyTest: () => apiPost<NotifyTestResult>("/api/notify/test"),
+  setRisk: (profile: string) =>
+    apiPost<Preferences>("/api/preferences/risk", { profile }),
+  setWatchlist: (symbols: string[]) =>
+    apiPost<{ watchlist: string[] }>("/api/preferences/watchlist", { symbols }),
 };
 
 export const orders = {

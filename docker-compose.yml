@@ -1,0 +1,31 @@
+# Local / self-hosted deployment of the Capybara backend (engine + control API).
+# The dashboard is intended for Vercel, but an optional frontend service is included
+# under the `full` profile for all-in-one local runs.
+#
+#   docker compose up backend           # engine + API on :8000
+#   docker compose --profile full up     # + dashboard on :3000
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - capybara-data:/data
+    restart: unless-stopped
+
+  frontend:
+    profiles: ["full"]
+    build:
+      context: ./frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  capybara-data:

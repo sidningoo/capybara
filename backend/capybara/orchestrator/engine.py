@@ -21,6 +21,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timezone
 
+from capybara.analytics.digest import build_digest
 from capybara.broker.base import BrokerAdapter
 from capybara.config import Settings
 from capybara.data.market_data import MarketData
@@ -29,13 +30,13 @@ from capybara.data.sentiment import (
     NullSentimentProvider,
     SentimentPolicy,
 )
-from capybara.analytics.digest import build_digest
 from capybara.execution.events import EventBus
 from capybara.execution.order_manager import OrderManager
 from capybara.logging_setup import get_logger
+from capybara.models import EngineState, Intent, SignalDirection
 from capybara.notify.base import Level
 from capybara.notify.manager import NotificationManager
-from capybara.models import EngineState, Horizon, Intent, Regime, SignalDirection
+from capybara.preferences import PreferencesManager
 from capybara.regime.detector import RegimeDetector
 from capybara.risk.manager import RiskGuardrails, RiskManager
 from capybara.selector.horizon import HorizonPolicy
@@ -58,6 +59,10 @@ class Orchestrator:
         self.broker = broker
         self.store = store or Store(settings.db_path)
         self.bus = bus or EventBus()
+
+        # Runtime preferences (risk profile + watchlist) override static config.
+        self.prefs = PreferencesManager(self.store, settings)
+        self.prefs.apply_risk_to_settings()
 
         self.market = MarketData(broker, timeframe=settings.timeframe, lookback=300)
         self.detector = RegimeDetector()
@@ -169,8 +174,8 @@ class Orchestrator:
             self.store.record_equity(now, account.equity, account.cash)
             return {"state": self.state.value, "halted": self.state == EngineState.HALTED}
 
-        # 1) Features per symbol + news sentiment for the universe.
-        symbols = self.s.universe_list
+        # 1) Features per symbol + news sentiment for the universe (from prefs watchlist).
+        symbols = self.prefs.watchlist or self.s.universe_list
         feats = self.market.features(symbols)
         sentiments = self.sentiment.get(symbols)
         self.last_sentiments = {
@@ -344,6 +349,18 @@ class Orchestrator:
         self.selector.pinned = strategy
         self.store.log_event("pin_strategy", {"strategy": strategy})
 
+    def set_risk_profile(self, profile: str) -> bool:
+        """Apply a risk preset (conservative/balanced/aggressive) live."""
+        ok = self.prefs.set_risk_profile(profile)
+        if ok:
+            # Sync live guardrail thresholds with the new preset.
+            self.guardrails.max_daily_loss_pct = self.s.max_daily_loss_pct
+            self.guardrails.max_drawdown_pct = self.s.max_drawdown_pct
+        return ok
+
+    def set_watchlist(self, symbols: list[str]) -> list[str]:
+        return self.prefs.set_watchlist(symbols)
+
     def block_strategy(self, strategy: str, blocked: bool) -> None:
         if blocked:
             self.selector.blocked.add(strategy)
@@ -365,7 +382,8 @@ class Orchestrator:
             "pinned_strategy": self.selector.pinned,
             "blocked_strategies": sorted(self.selector.blocked),
             "last_cycle_at": self.last_cycle_at.isoformat() if self.last_cycle_at else None,
-            "universe": self.s.universe_list,
+            "universe": self.prefs.watchlist or self.s.universe_list,
+            "preferences": self.prefs.snapshot(),
             "account": _account_dict(account),
             "positions": [_pos_dict(p) for p in positions],
             "selections": {

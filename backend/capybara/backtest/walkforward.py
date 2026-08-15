@@ -21,7 +21,7 @@ import pandas as pd
 from capybara.config import Settings, get_settings
 from capybara.data.features import compute_features
 from capybara.logging_setup import get_logger
-from capybara.models import Regime, SignalDirection
+from capybara.models import SignalDirection
 from capybara.regime.detector import RegimeDetector
 from capybara.selector.bandit import LinUCBSelector
 from capybara.selector.context import CONTEXT_FEATURES, ContextScaler

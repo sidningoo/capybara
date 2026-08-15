@@ -30,3 +30,11 @@ class KillReq(BaseModel):
 
 class ApprovalReq(BaseModel):
     client_order_id: str
+
+
+class RiskProfileReq(BaseModel):
+    profile: str = Field(description="conservative | balanced | aggressive")
+
+
+class WatchlistReq(BaseModel):
+    symbols: list[str] = Field(description="full replacement watchlist of symbols")

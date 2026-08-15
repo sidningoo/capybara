@@ -70,6 +70,19 @@ automatically (dual-cadence loop) and add a transformer-based sentiment model.
   weighted) instead of picking one strategy.
 - ✅ **Dashboard**: Analytics panel, Digest view, and a "Test alert" button.
 
+## Phase 5 — deploy 24/7 & nudge it ✅ (shipped)
+
+- ✅ **Runtime preferences** (`preferences.py`): pick a **risk profile**
+  (conservative / balanced / aggressive) and edit the **watchlist** live from the
+  dashboard — persisted in the store, applied on the next cycle. The light-touch
+  "give it recommendations" surface, no redeploy needed.
+- ✅ **Deployment** (`backend/Dockerfile`, `docker-compose.yml`, `backend/Procfile`,
+  `docs/DEPLOYMENT.md`): run the engine on any always-on host (Docker / Railway /
+  Render / Fly / VM) with the dashboard on Vercel.
+- ✅ **CI** (`.github/workflows/ci.yml`): backend lint (ruff) + synthetic backtest
+  smoke, and frontend production build — on every push/PR.
+- ✅ **Dashboard**: Preferences panel (risk selector + watchlist editor).
+
 ## Explicitly out of scope (for now)
 
 - **Live (real-money) trading.** Paper only until the system has a long, honest paper
