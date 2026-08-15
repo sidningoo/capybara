@@ -126,6 +126,23 @@ def create_app() -> FastAPI:
         """Latest per-symbol news sentiment computed on the last cycle."""
         return {"sentiment": orch.last_sentiments}
 
+    @app.get("/api/analytics")
+    async def analytics(orch: Orchestrator = Depends(get_orch)) -> dict:
+        from capybara.analytics.performance import compute_analytics
+        return compute_analytics(orch.store).to_dict()
+
+    @app.get("/api/digest")
+    async def digest(orch: Orchestrator = Depends(get_orch)) -> dict:
+        from capybara.analytics.digest import build_digest
+        return {"digest": build_digest(orch.store, orch.snapshot())}
+
+    @app.post("/api/notify/test", dependencies=[Depends(require_token)])
+    async def notify_test(orch: Orchestrator = Depends(get_orch)) -> dict:
+        from capybara.notify.base import Level
+        orch.notifier.notify("test", "Test notification",
+                             "Capybara notifications are working. 🐹", Level.INFO, dedup=False)
+        return {"enabled": orch.notifier.enabled, "channels": [n.name for n in orch.notifier.notifiers]}
+
     @app.get("/api/equity-curve")
     async def equity_curve(orch: Orchestrator = Depends(get_orch)) -> dict:
         return {"equity_curve": orch.store.get_equity_curve()}

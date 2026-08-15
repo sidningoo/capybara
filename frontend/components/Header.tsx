@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { control, EngineState, getToken, setToken, Status } from "@/lib/api";
+import {
+  control,
+  EngineState,
+  getToken,
+  NotifyTestResult,
+  setToken,
+  Status,
+} from "@/lib/api";
 import { useAction } from "@/lib/useAction";
+import { useToast } from "./Toaster";
 
 export function stateColor(state: EngineState): string {
   switch (state) {
@@ -98,11 +106,27 @@ export function Header({
   onChanged: () => void;
 }) {
   const { run, pending } = useAction(onChanged);
+  const { push } = useToast();
   const level = status?.autonomy_level ?? 0;
 
   const setLevel = (lvl: 0 | 1 | 2) => {
     if (lvl === level) return;
     run(() => control.autonomy(lvl), `Autonomy set to ${AUTONOMY_LABELS[lvl]}`);
+  };
+
+  const testAlert = async () => {
+    let result: NotifyTestResult | null = null;
+    const ok = await run(async () => {
+      result = await control.notifyTest();
+    });
+    if (ok && result) {
+      const { enabled, channels } = result as NotifyTestResult;
+      const msg =
+        channels.length > 0
+          ? `Notifications: ${channels.join(", ")}`
+          : "No channels configured";
+      push(msg, enabled ? "success" : "info");
+    }
   };
 
   return (
@@ -136,6 +160,14 @@ export function Header({
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={testAlert}
+            disabled={pending}
+            title="Send a test notification through configured channels"
+            className="rounded-md border border-base-600 bg-base-700 px-2.5 py-1 text-xs text-slate-200 transition-colors hover:bg-base-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Test alert
+          </button>
           <TokenInput />
           <div className="flex items-center gap-1.5" title={connected ? "WebSocket connected" : "WebSocket disconnected"}>
             <span

@@ -54,6 +54,22 @@ Deferred to a later hardening pass:
 Phase-3.5 follow-on: actually *route* intraday-flagged opportunities to the fast clock
 automatically (dual-cadence loop) and add a transformer-based sentiment model.
 
+## Phase 4 — analytics, alerts & ensemble ✅ (shipped)
+
+- ✅ **Performance analytics** (`analytics/performance.py`): FIFO round-trip P&L, win
+  rate, profit factor, drawdown, Sharpe, per-strategy attribution — plus a
+  **plain-English summary** so you don't have to read tables. Exposed at `/api/analytics`.
+- ✅ **Plain-English daily digest** (`analytics/digest.py`): a phone-friendly summary of
+  what the bot did, where it stands, and what needs attention. Exposed at `/api/digest`.
+- ✅ **Notifications** (`notify/`): pluggable channels — Slack/Discord/generic **webhook**
+  and **email (SMTP)** — with severity filtering + dedup. Alerts on halts, kill switch,
+  and orders awaiting approval, and pushes the daily digest. So you get told, instead of
+  checking.
+- ✅ **Ensemble allocator** (`selector/ensemble.py` + `strategies/ensemble.py`): a
+  `CAPYBARA_SELECTOR=ensemble` mode that blends the whole playbook (confidence + agreement
+  weighted) instead of picking one strategy.
+- ✅ **Dashboard**: Analytics panel, Digest view, and a "Test alert" button.
+
 ## Explicitly out of scope (for now)
 
 - **Live (real-money) trading.** Paper only until the system has a long, honest paper

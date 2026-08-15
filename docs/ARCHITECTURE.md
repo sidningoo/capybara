@@ -130,6 +130,23 @@ Sentiment is a portfolio/selector-level signal, deliberately kept out of the ban
 trained context to avoid a train/live feature mismatch (documented in the roadmap).
 The data cadence is configurable via `CAPYBARA_TIMEFRAME` (swing daily bars by default).
 
+## Phase 4 additions (analytics, alerts & ensemble)
+
+| Component | File | Responsibility |
+| --- | --- | --- |
+| Analytics | `analytics/performance.py` | FIFO round-trip P&L, win rate, profit factor, drawdown, Sharpe, per-strategy attribution + a plain-English summary. From the store, so it works for live and backtest alike. |
+| Daily digest | `analytics/digest.py` | Phone-friendly plain-English recap of the day's activity + current stance + what needs attention. |
+| Notifications | `notify/` | `Notifier` ABC, `WebhookNotifier` (Slack/Discord/generic), `EmailNotifier` (SMTP), and `NotificationManager` (level filter + dedup + digest). |
+| Ensemble | `selector/ensemble.py`, `strategies/ensemble.py` | A selector mode that blends the whole playbook (confidence + agreement weighted) into one position. |
+
+**Notifications wiring:** the orchestrator holds a `NotificationManager` and fires
+alerts on halt, kill switch, and pending approvals, and sends the daily digest at the
+day rollover — all best-effort and wrapped so a failing channel never touches the
+trading loop. This is the piece that makes the system *actually* hands-off: the user is
+pushed a summary and told when something needs a look, instead of having to watch.
+
+Exposed via `GET /api/analytics`, `GET /api/digest`, and `POST /api/notify/test`.
+
 ## Deployment topology
 
 ```

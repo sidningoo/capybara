@@ -206,6 +206,9 @@ capybara/
 - **Phase 3 ✅:** **news/NLP sentiment** (the bot reads headlines, vetoes trades on
   bad news, and tilts size by sentiment) and **auto horizon selection** (it decides
   day-trade vs. swing per opportunity). Surfaced in the dashboard.
+- **Phase 4 ✅:** **performance analytics** + **plain-English daily digest**,
+  **push notifications** (Slack/Discord/email — get told, don't check), and an optional
+  **ensemble** allocator that blends the whole playbook.
 
 Full detail in **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 

@@ -29,9 +29,12 @@ from capybara.data.sentiment import (
     NullSentimentProvider,
     SentimentPolicy,
 )
+from capybara.analytics.digest import build_digest
 from capybara.execution.events import EventBus
 from capybara.execution.order_manager import OrderManager
 from capybara.logging_setup import get_logger
+from capybara.notify.base import Level
+from capybara.notify.manager import NotificationManager
 from capybara.models import EngineState, Horizon, Intent, Regime, SignalDirection
 from capybara.regime.detector import RegimeDetector
 from capybara.risk.manager import RiskGuardrails, RiskManager
@@ -58,8 +61,8 @@ class Orchestrator:
 
         self.market = MarketData(broker, timeframe=settings.timeframe, lookback=300)
         self.detector = RegimeDetector()
-        self.selector = self._build_selector()
         self.playbook = default_playbook()
+        self.selector = self._build_selector()
         self.sentiment = self._build_sentiment_provider()
         self.sentiment_policy = SentimentPolicy(
             neg_veto=settings.sentiment_neg_veto,
@@ -67,6 +70,7 @@ class Orchestrator:
             enabled=settings.enable_sentiment,
         )
         self.horizon_policy = HorizonPolicy(enabled=settings.enable_auto_horizon)
+        self.notifier = NotificationManager(settings)
         self.risk = RiskManager(settings)
         self.guardrails = RiskGuardrails(
             max_daily_loss_pct=settings.max_daily_loss_pct,
@@ -89,8 +93,15 @@ class Orchestrator:
 
     # ───────────── selector factory ─────────────
     def _build_selector(self):
-        """Pick the selector per config: rules (default) or a learned LinUCB model."""
-        if self.s.selector_type.lower() == "bandit":
+        """Pick the selector per config: rules (default), learned LinUCB, or ensemble."""
+        kind = self.s.selector_type.lower()
+        if kind == "ensemble":
+            from capybara.selector.ensemble import EnsembleSelector
+            from capybara.strategies.ensemble import EnsembleStrategy
+            self.playbook["ensemble"] = EnsembleStrategy(list(default_playbook().values()))
+            log.info("Using ensemble selector (blends the full playbook).")
+            return EnsembleSelector()
+        if kind == "bandit":
             try:
                 from capybara.selector.bandit import LinUCBSelector
                 sel = LinUCBSelector.load(self.s.bandit_model_path)
@@ -133,12 +144,18 @@ class Orchestrator:
         account = self.broker.get_account()
         positions = self.broker.get_positions()
 
-        # Day boundary -> reset daily-loss baseline.
+        # Day boundary -> reset daily-loss baseline (and send yesterday's digest).
         day = now.date().isoformat()
         if self._current_day != day:
+            prev_day = self._current_day
             self._current_day = day
             self.guardrails.start_day(account.equity)
             self.store.log_event("day_start", {"date": day, "equity": account.equity})
+            if prev_day is not None and self.s.daily_digest:
+                try:
+                    self.notifier.send_digest(build_digest(self.store, self.snapshot()))
+                except Exception as exc:  # never let digest break the loop
+                    log.debug("digest failed: %s", exc)
 
         self.guardrails.update(account.equity)
         halt, reason = self.guardrails.check(account.equity)
@@ -224,6 +241,15 @@ class Orchestrator:
         )
         submitted = self.execution.execute_decision(decision)
 
+        # 4b) Notify if orders are waiting for human approval (L0/L1 gate).
+        pending = [o for o in decision.orders if o.status.value == "pending_approval"]
+        if pending:
+            syms = ", ".join(f"{o.side.value} {int(o.qty)} {o.symbol}" for o in pending[:5])
+            self.notifier.notify(
+                "pending_approval", "Approval needed",
+                f"{len(pending)} order(s) awaiting your approval: {syms}", Level.WARNING,
+            )
+
         # 5) Snapshot.
         self.store.record_equity(now, account.equity, account.cash)
         return {
@@ -288,6 +314,7 @@ class Orchestrator:
             self.state = EngineState.HALTED
             self.halt_reason = reason
             self.store.log_event("halt", {"reason": reason})
+            self.notifier.notify("halt", "Trading halted", reason, Level.CRITICAL)
             log.warning("HALTED: %s", reason)
 
     def clear_halt(self) -> None:

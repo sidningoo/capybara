@@ -60,6 +60,20 @@ class Settings(BaseSettings):
     # Data path: "1Day" (swing, default), "1Hour", "15Min", "5Min", "1Min" (intraday).
     timeframe: str = Field(default="1Day", alias="CAPYBARA_TIMEFRAME")
 
+    # --- Notifications (Phase 4) ---
+    enable_notifications: bool = Field(default=False, alias="CAPYBARA_ENABLE_NOTIFICATIONS")
+    notify_min_level: str = Field(default="warning", alias="CAPYBARA_NOTIFY_MIN_LEVEL")
+    notify_dedup_seconds: int = Field(default=300, alias="CAPYBARA_NOTIFY_DEDUP_SECONDS")
+    notify_webhook_url: str = Field(default="", alias="CAPYBARA_NOTIFY_WEBHOOK_URL")
+    daily_digest: bool = Field(default=True, alias="CAPYBARA_DAILY_DIGEST")
+    # Email (SMTP)
+    notify_email_to: str = Field(default="", alias="CAPYBARA_NOTIFY_EMAIL_TO")
+    smtp_host: str = Field(default="", alias="CAPYBARA_SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="CAPYBARA_SMTP_PORT")
+    smtp_user: str = Field(default="", alias="CAPYBARA_SMTP_USER")
+    smtp_password: str = Field(default="", alias="CAPYBARA_SMTP_PASSWORD")
+    smtp_from: str = Field(default="", alias="CAPYBARA_SMTP_FROM")
+
     # --- Persistence ---
     db_path: str = Field(default="./capybara.db", alias="CAPYBARA_DB_PATH")
 
