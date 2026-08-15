@@ -14,6 +14,7 @@ import { ManualTrade } from "@/components/ManualTrade";
 import { NewsPanel } from "@/components/NewsPanel";
 import { Orders } from "@/components/Orders";
 import { Positions } from "@/components/Positions";
+import { PreferencesPanel } from "@/components/PreferencesPanel";
 import { Selections } from "@/components/Selections";
 import { StrategiesPanel } from "@/components/StrategiesPanel";
 
@@ -41,6 +42,11 @@ export default function Page() {
         {/* Control spans full width. */}
         <div className="mb-4">
           <ControlPanel status={status} onChanged={refresh} />
+        </div>
+
+        {/* Preferences: risk appetite + watchlist control surface. */}
+        <div className="mb-4">
+          <PreferencesPanel refreshKey={version} onChanged={refresh} />
         </div>
 
         {/* Top row: account + equity curve. */}

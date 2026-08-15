@@ -106,3 +106,36 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# Risk presets the user can pick from the dashboard (a friendly abstraction over the
+# individual guardrail knobs). "balanced" mirrors the defaults.
+RISK_PRESETS: dict[str, dict] = {
+    "conservative": {
+        "max_position_pct": 10.0,
+        "max_concurrent_positions": 4,
+        "max_gross_exposure_pct": 60.0,
+        "max_daily_loss_pct": 2.0,
+        "max_drawdown_pct": 10.0,
+        "target_vol": 0.10,
+        "max_sector_pct": 30.0,
+    },
+    "balanced": {
+        "max_position_pct": 20.0,
+        "max_concurrent_positions": 5,
+        "max_gross_exposure_pct": 100.0,
+        "max_daily_loss_pct": 3.0,
+        "max_drawdown_pct": 15.0,
+        "target_vol": 0.15,
+        "max_sector_pct": 40.0,
+    },
+    "aggressive": {
+        "max_position_pct": 30.0,
+        "max_concurrent_positions": 8,
+        "max_gross_exposure_pct": 100.0,
+        "max_daily_loss_pct": 5.0,
+        "max_drawdown_pct": 25.0,
+        "target_vol": 0.22,
+        "max_sector_pct": 60.0,
+    },
+}

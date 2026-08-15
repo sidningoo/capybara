@@ -24,6 +24,8 @@ from capybara.api.schemas import (
     KillReq,
     ManualOrderReq,
     PinReq,
+    RiskProfileReq,
+    WatchlistReq,
 )
 from capybara.config import Settings, get_settings
 from capybara.logging_setup import get_logger
@@ -47,8 +49,8 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
     else:
         import pandas as pd
 
-        from capybara.broker.backtest import BacktestBroker
         from capybara.backtest.synthetic import make_universe
+        from capybara.broker.backtest import BacktestBroker
         bars = make_universe(s.universe_list, n_days=400)
         broker = BacktestBroker(bars, starting_cash=100_000.0)
         last_ts = max(df.index.max() for df in bars.values())
@@ -211,6 +213,22 @@ def create_app() -> FastAPI:
     async def ctl_block(req: BlockReq, orch: Orchestrator = Depends(get_orch)) -> dict:
         orch.block_strategy(req.strategy, req.blocked)
         return {"blocked": sorted(orch.selector.blocked)}
+
+    # ───────────── preferences (nudge the bot) ─────────────
+    @app.get("/api/preferences")
+    async def get_preferences(orch: Orchestrator = Depends(get_orch)) -> dict:
+        return orch.prefs.snapshot()
+
+    @app.post("/api/preferences/risk", dependencies=[Depends(require_token)])
+    async def set_risk(req: RiskProfileReq, orch: Orchestrator = Depends(get_orch)) -> dict:
+        if not orch.set_risk_profile(req.profile):
+            raise HTTPException(400, f"unknown risk profile '{req.profile}'")
+        return orch.prefs.snapshot()
+
+    @app.post("/api/preferences/watchlist", dependencies=[Depends(require_token)])
+    async def set_watchlist(req: WatchlistReq, orch: Orchestrator = Depends(get_orch)) -> dict:
+        wl = orch.set_watchlist(req.symbols)
+        return {"watchlist": wl}
 
     # ───────────── orders / positions (mutating) ─────────────
     @app.post("/api/orders/manual", dependencies=[Depends(require_token)])

@@ -1,0 +1,2 @@
+# For buildpack platforms (Railway/Render/Heroku) with root directory = backend.
+web: capybara run

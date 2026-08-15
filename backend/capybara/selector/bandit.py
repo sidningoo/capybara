@@ -24,7 +24,7 @@ import json
 import numpy as np
 
 from capybara.logging_setup import get_logger
-from capybara.models import Regime, RegimeReading
+from capybara.models import RegimeReading
 from capybara.selector.context import ContextScaler
 from capybara.selector.selector import Selection
 from capybara.strategies.registry import CASH

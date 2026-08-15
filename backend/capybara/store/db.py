@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS decisions (
     sentiment REAL DEFAULT 0,
     horizon TEXT DEFAULT 'swing'
 );
+CREATE TABLE IF NOT EXISTS kv (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 """
@@ -249,3 +254,17 @@ class Store:
                 "SELECT * FROM decisions ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # ───────────── key-value store (preferences etc.) ─────────────
+    def set_kv(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO kv(key, value, updated_at) VALUES (?,?,?)",
+                (key, json.dumps(value, default=str), datetime.utcnow().isoformat()),
+            )
+            self._conn.commit()
+
+    def get_kv(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            r = self._conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        return json.loads(r["value"]) if r else default

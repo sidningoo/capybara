@@ -209,6 +209,10 @@ capybara/
 - **Phase 4 ✅:** **performance analytics** + **plain-English daily digest**,
   **push notifications** (Slack/Discord/email — get told, don't check), and an optional
   **ensemble** allocator that blends the whole playbook.
+- **Phase 5 ✅:** **runtime preferences** (pick a risk appetite + edit the watchlist
+  from the dashboard, no redeploy), **Docker/compose + CI**, and a full
+  **[deployment guide](docs/DEPLOYMENT.md)** (engine on an always-on host, dashboard
+  on Vercel).
 
 Full detail in **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
